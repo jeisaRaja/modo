@@ -1,40 +1,28 @@
-use std::io::stdout;
-
 use crossterm::event::KeyModifiers;
 use crossterm::event::{read, Event, Event::Key, KeyCode::Char, KeyEvent};
-use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
+pub mod terminal;
+use terminal::Terminal;
 
 pub struct Editor {
     should_quit: bool,
 }
 
 impl Editor {
-    pub fn new() -> Self {
-        Editor { should_quit: false }
+    pub const fn default() -> Self {
+        Self { should_quit: false }
     }
 
     fn repl(&mut self) -> Result<(), std::io::Error> {
         loop {
-            let event = read()?;
-            self.evaluate_event(&event);
             self.refresh_screen()?;
-
-            if self.should_quit == true {
+            if self.should_quit {
                 break;
             }
+
+            let event = read()?;
+            self.evaluate_event(&event);
         }
         Ok(())
-    }
-
-    fn initialize() -> Result<(), std::io::Error> {
-        enable_raw_mode()?;
-        Self::clear_screen()
-    }
-
-    fn clear_screen() -> Result<(), std::io::Error> {
-        let mut stdout = stdout();
-        execute!(stdout, Clear(ClearType::All))
     }
 
     fn evaluate_event(&mut self, event: &Event) {
@@ -50,17 +38,32 @@ impl Editor {
     }
 
     fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
-        if self.should_quit == true {
-            Self::clear_screen()?;
+        if self.should_quit {
+            Terminal::clear_screen()?;
             print!("Goodbye.\r\n");
+        } else {
+            Self::draw_rows()?;
+            Terminal::move_cursor_to(0, 0)?;
         }
 
         Ok(())
     }
 
-    pub fn run(&mut self) {
-        if let Err(err) = self.repl() {
-            panic!("{err:#?}")
+    fn draw_rows() -> Result<(), std::io::Error> {
+        let height = Terminal::size()?.1;
+        for cur_row in 0..height {
+            print!("~");
+            if cur_row + 1 < height {
+                print!("\r\n")
+            }
         }
+        Ok(())
+    }
+
+    pub fn run(&mut self) {
+        Terminal::initialize().unwrap();
+        let result = self.repl();
+        Terminal::terminate().unwrap();
+        result.unwrap();
     }
 }
