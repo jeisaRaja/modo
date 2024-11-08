@@ -1,5 +1,8 @@
 #![warn(clippy::all, clippy::pedantic, clippy::print_stdout)]
-use std::io::{stdout, Error, Write};
+use std::{
+    fmt::Display,
+    io::{stdout, Error, Write},
+};
 
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
@@ -12,14 +15,20 @@ pub struct Terminal {}
 
 #[derive(Clone, Copy)]
 pub struct Size {
-    pub width: u16,
-    pub height: u16,
+    pub width: usize,
+    pub height: usize,
 }
 
 #[derive(Clone, Copy)]
 pub struct Position {
-    pub x: u16,
-    pub y: u16,
+    pub col: usize,
+    pub row: usize,
+}
+
+impl Position {
+    pub fn default() -> Self {
+        Position { col: 0, row: 0 }
+    }
 }
 
 impl Terminal {
@@ -32,7 +41,7 @@ impl Terminal {
     pub fn initialize() -> Result<(), Error> {
         enable_raw_mode()?;
         Self::clear_screen()?;
-        Self::move_cursor_to(Position { x: 0, y: 0 })?;
+        Self::move_caret_to(Position { col: 0, row: 0 })?;
         Self::execute()?;
         Ok(())
     }
@@ -47,29 +56,29 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn hide_cursor() -> Result<(), Error> {
+    pub fn hide_caret() -> Result<(), Error> {
         queue!(stdout(), Hide)?;
         Ok(())
     }
 
-    pub fn show_cursor() -> Result<(), Error> {
+    pub fn show_caret() -> Result<(), Error> {
         queue!(stdout(), Show)?;
         Ok(())
     }
 
-    pub fn move_cursor_to(pos: Position) -> Result<(), Error> {
-        queue!(stdout(), MoveTo(pos.x, pos.y))?;
+    pub fn move_caret_to(pos: Position) -> Result<(), Error> {
+        queue!(stdout(), MoveTo(pos.col as u16, pos.row as u16))?;
         Ok(())
     }
 
     pub fn size() -> Result<Size, Error> {
         Ok(Size {
-            width: size()?.0,
-            height: size()?.1,
+            width: size()?.0 as usize,
+            height: size()?.1 as usize,
         })
     }
 
-    pub fn print(string: &str) -> Result<(), Error> {
+    pub fn print<T: Display>(string: T) -> Result<(), Error> {
         queue!(stdout(), Print(string))?;
         Ok(())
     }
