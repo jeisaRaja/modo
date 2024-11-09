@@ -1,39 +1,38 @@
 use crossterm::event::{read, Event, Event::Key, KeyCode::*, KeyEvent};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::cmp::min;
-use std::io::{stdout, Error, Write};
 pub mod terminal;
+pub mod view;
+use crate::Result;
 use terminal::{Size, Terminal};
+use view::View;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[derive(Default)]
 pub struct Location {
     x: usize,
     y: usize,
 }
 
+#[derive(Default)]
 pub struct Editor {
     should_quit: bool,
     location: Location,
+    view: View,
 }
 
 impl Editor {
-    pub const fn default() -> Self {
-        Self {
-            should_quit: false,
-            location: Location { x: 0, y: 0 },
-        }
-    }
-
     pub fn run(&mut self) {
         Terminal::initialize().unwrap();
+        self.handle_args();
         let result = self.repl();
         Terminal::terminate().unwrap();
         result.unwrap();
     }
 
-    fn repl(&mut self) -> Result<(), Error> {
+    fn repl(&mut self) -> Result<()> {
         loop {
             self.refresh_screen()?;
             if self.should_quit {
@@ -46,14 +45,14 @@ impl Editor {
         Ok(())
     }
 
-    fn refresh_screen(&mut self) -> Result<(), Error> {
+    fn refresh_screen(&mut self) -> Result<()> {
         Terminal::hide_caret()?;
         Terminal::move_caret_to(terminal::Position::default())?;
         if self.should_quit {
             Terminal::clear_screen()?;
             print!("Goodbye.\r\n");
         } else {
-            Self::draw_rows()?;
+            self.view.render()?;
             Terminal::move_caret_to(terminal::Position {
                 col: self.location.x,
                 row: self.location.y,
@@ -65,7 +64,7 @@ impl Editor {
         Ok(())
     }
 
-    fn evaluate_event(&mut self, event: &Event) -> Result<(), Error> {
+    fn evaluate_event(&mut self, event: &Event) -> Result<()> {
         if let Key(KeyEvent {
             code, modifiers, ..
         }) = event
@@ -79,7 +78,7 @@ impl Editor {
         Ok(())
     }
 
-    fn move_to(&mut self, key_code: KeyCode) -> Result<(), Error> {
+    fn move_to(&mut self, key_code: KeyCode) -> Result<()> {
         let Location { mut x, mut y } = self.location;
         let Size { height, width } = Terminal::size()?;
 
@@ -95,37 +94,10 @@ impl Editor {
         Ok(())
     }
 
-    fn draw_rows() -> Result<(), Error> {
-        let Size { height, .. } = Terminal::size()?;
-        for cur_row in 0..height {
-            Terminal::clear_line()?;
-            if cur_row == height / 3 {
-                Self::draw_welcome_text()?;
-            } else {
-                Self::draw_empty_row()?;
-            }
-            if cur_row + 1 < height {
-                Terminal::print("\r\n")?;
-            }
+    fn handle_args(&mut self) {
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(filename) = args.get(1) {
+            self.view.load(filename);
         }
-
-        Ok(())
-    }
-
-    fn draw_empty_row() -> Result<(), Error> {
-        Terminal::print("~")
-    }
-
-    fn draw_welcome_text() -> Result<(), Error> {
-        let mut welcome_message = format!("{APP_NAME} editor -- version {VERSION}");
-        let width = Terminal::size()?.width as usize;
-        let len = welcome_message.len();
-        let padding = (width - len) / 2;
-        let spaces = " ".repeat(padding - 1);
-        welcome_message = format!("~{spaces}{welcome_message}");
-        welcome_message.truncate(width);
-        Terminal::print(&welcome_message)?;
-
-        Ok(())
     }
 }

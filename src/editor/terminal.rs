@@ -1,8 +1,6 @@
 #![warn(clippy::all, clippy::pedantic, clippy::print_stdout)]
-use std::{
-    fmt::Display,
-    io::{stdout, Error, Write},
-};
+use crate::Result;
+use std::io::{stdout, Write};
 
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
@@ -32,13 +30,13 @@ impl Position {
 }
 
 impl Terminal {
-    pub fn terminate() -> Result<(), Error> {
+    pub fn terminate() -> Result<()> {
         Self::execute()?;
         disable_raw_mode()?;
         Ok(())
     }
 
-    pub fn initialize() -> Result<(), Error> {
+    pub fn initialize() -> Result<()> {
         enable_raw_mode()?;
         Self::clear_screen()?;
         Self::move_caret_to(Position { col: 0, row: 0 })?;
@@ -46,44 +44,44 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn clear_screen() -> Result<(), Error> {
+    pub fn clear_screen() -> Result<()> {
         queue!(stdout(), Clear(ClearType::All))?;
         Ok(())
     }
 
-    pub fn clear_line() -> Result<(), Error> {
+    pub fn clear_line() -> Result<()> {
         queue!(stdout(), Clear(ClearType::CurrentLine))?;
         Ok(())
     }
 
-    pub fn hide_caret() -> Result<(), Error> {
+    pub fn hide_caret() -> Result<()> {
         queue!(stdout(), Hide)?;
         Ok(())
     }
 
-    pub fn show_caret() -> Result<(), Error> {
+    pub fn show_caret() -> Result<()> {
         queue!(stdout(), Show)?;
         Ok(())
     }
 
-    pub fn move_caret_to(pos: Position) -> Result<(), Error> {
+    pub fn move_caret_to(pos: Position) -> Result<()> {
         queue!(stdout(), MoveTo(pos.col as u16, pos.row as u16))?;
         Ok(())
     }
 
-    pub fn size() -> Result<Size, Error> {
+    pub fn size() -> Result<Size> {
         Ok(Size {
             width: size()?.0 as usize,
             height: size()?.1 as usize,
         })
     }
 
-    pub fn print<T: Display>(string: T) -> Result<(), Error> {
+    pub fn print(string: &str) -> Result<()> {
         queue!(stdout(), Print(string))?;
         Ok(())
     }
 
-    pub fn execute() -> Result<(), Error> {
+    pub fn execute() -> Result<()> {
         stdout().flush()?;
         Ok(())
     }
