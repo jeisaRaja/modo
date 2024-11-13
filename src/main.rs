@@ -6,5 +6,5 @@ pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 fn main() {
-    Editor::default().run();
+    Editor::new().unwrap().run();
 }

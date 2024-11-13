@@ -1,78 +1,80 @@
-use std::fs;
-
 use crate::editor::{APP_NAME, VERSION};
-use crate::Result;
 use buffer::Buffer;
 pub mod buffer;
 
 use super::terminal::{Size, Terminal};
 
-#[derive(Default)]
 pub struct View {
-    buffer: Buffer,
+    pub buffer: Buffer,
+    size: Size,
+    need_redraw: bool,
 }
 
 impl View {
+    pub fn resize(&mut self, size: Size) {
+        self.size = size;
+        self.need_redraw = true;
+    }
+
     pub fn load(&mut self, filename: &str) {
         if let Ok(buffer) = self.buffer.load(filename) {
             self.buffer = buffer;
         }
     }
 
-    pub fn render(&self) -> Result<()> {
-        if self.buffer.is_empty() {
-            Self::render_welcome_message()
-        } else {
-            self.render_buffer()
+    pub fn render(&mut self) {
+        if !self.need_redraw {
+            return;
         }
-    }
+        let Size { width, height } = self.size;
+        if height == 0 || width == 0 {
+            return;
+        }
 
-    pub fn render_buffer(&self) -> Result<()> {
-        let Size { height, .. } = Terminal::size()?;
         for cur_row in 0..height {
-            Terminal::clear_line()?;
             if let Some(line) = self.buffer.lines.get(cur_row) {
-                Terminal::print(line)?;
-                Terminal::print("\r\n")?;
+                let truncated_line = if line.len() >= width {
+                    &line[0..width]
+                } else {
+                    line
+                };
+                Self::render_line(cur_row, truncated_line);
+            } else if cur_row == (height / 3) && self.buffer.is_empty() {
+                Self::render_line(cur_row, &Self::build_welcome_message(self.size.width));
             } else {
-                Self::draw_empty_row()?;
-                Terminal::print("\r\n")?;
+                Self::render_line(cur_row, "~");
             }
         }
-        Ok(())
+        self.need_redraw = false;
     }
 
-    pub fn render_welcome_message() -> Result<()> {
-        let Size { height, .. } = Terminal::size()?;
-        for cur_row in 0..height {
-            Terminal::clear_line()?;
-            if cur_row == height / 3 {
-                Self::draw_welcome_text()?;
-            } else {
-                Self::draw_empty_row()?;
-            }
-            if cur_row.saturating_add(1) < height {
-                Terminal::print("\r\n")?;
-            }
+    pub fn render_line(cur_row: usize, text: &str) {
+        let result = Terminal::print_line(cur_row, text);
+        debug_assert!(result.is_ok(), "Error when rendering line.");
+    }
+
+    pub fn build_welcome_message(width: usize) -> String {
+        if width == 0 {
+            return " ".to_string();
         }
 
-        Ok(())
-    }
-
-    fn draw_empty_row() -> Result<()> {
-        Terminal::print("~")
-    }
-
-    fn draw_welcome_text() -> Result<()> {
-        let mut welcome_message = format!("{APP_NAME} editor -- version {VERSION}");
-        let width = Terminal::size()?.width as usize;
+        let welcome_message = format!("{APP_NAME} editor -- version {VERSION}");
         let len = welcome_message.len();
-        let padding = (width - len) / 2;
-        let spaces = " ".repeat(padding - 1);
-        welcome_message = format!("~{spaces}{welcome_message}");
-        welcome_message.truncate(width);
-        Terminal::print(&welcome_message)?;
+        if width <= len {
+            return "~".to_string();
+        }
+        let padding = width.saturating_sub(len).saturating_sub(1) / 2;
+        let full_message = format!("~{}{}", " ".repeat(padding), welcome_message);
+        full_message
+    }
+}
 
-        Ok(())
+impl Default for View {
+    fn default() -> Self {
+        Self {
+            buffer: Buffer::default(),
+            need_redraw: true,
+            size: Terminal::size().unwrap_or_default(),
+        }
     }
 }

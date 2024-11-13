@@ -1,6 +1,8 @@
-use crossterm::event::{read, Event, Event::Key, KeyCode::*, KeyEvent};
+use core::panic;
+use crossterm::event::{self, read, Event, KeyCode::*, KeyEvent};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::cmp::min;
+use std::panic::{set_hook, take_hook};
 pub mod terminal;
 pub mod view;
 use crate::Result;
@@ -23,64 +25,88 @@ pub struct Editor {
     view: View,
 }
 
+impl Drop for Editor {
+    fn drop(&mut self) {
+        let _ = Terminal::terminate();
+        if self.should_quit {
+            let _ = Terminal::print("Goodbye.\r\n");
+        }
+    }
+}
+
 impl Editor {
-    pub fn run(&mut self) {
-        Terminal::initialize().unwrap();
-        self.handle_args();
-        let result = self.repl();
-        Terminal::terminate().unwrap();
-        result.unwrap();
+    pub fn new() -> Result<Self> {
+        let current_hook = take_hook();
+        set_hook(Box::new(move |panic_info| {
+            let _ = Terminal::terminate();
+            current_hook(panic_info);
+        }));
+        Terminal::initialize()?;
+
+        let view = View::default();
+
+        let mut editor = Self {
+            should_quit: false,
+            location: Location::default(),
+            view,
+        };
+
+        editor.handle_args();
+        Ok(editor)
     }
 
-    fn repl(&mut self) -> Result<()> {
+    pub fn run(&mut self) {
         loop {
-            self.refresh_screen()?;
+            self.refresh_screen();
             if self.should_quit {
                 break;
             }
-
-            let event = read()?;
-            self.evaluate_event(&event)?;
-        }
-        Ok(())
-    }
-
-    fn refresh_screen(&mut self) -> Result<()> {
-        Terminal::hide_caret()?;
-        Terminal::move_caret_to(terminal::Position::default())?;
-        if self.should_quit {
-            Terminal::clear_screen()?;
-            print!("Goodbye.\r\n");
-        } else {
-            self.view.render()?;
-            Terminal::move_caret_to(terminal::Position {
-                col: self.location.x,
-                row: self.location.y,
-            })?;
-        }
-
-        Terminal::show_caret()?;
-        Terminal::execute()?;
-        Ok(())
-    }
-
-    fn evaluate_event(&mut self, event: &Event) -> Result<()> {
-        if let Key(KeyEvent {
-            code, modifiers, ..
-        }) = event
-        {
-            match code {
-                Char('q') if *modifiers == KeyModifiers::CONTROL => self.should_quit = true,
-                Up | Down | Left | Right => self.move_to(*code)?,
-                _ => (),
+            match read() {
+                Ok(event) => self.evaluate_event(&event),
+                Err(err) => {
+                    #[cfg(debug_assertions)]
+                    {
+                        panic!("Could not read event: {err:?}")
+                    }
+                }
             }
         }
-        Ok(())
     }
 
-    fn move_to(&mut self, key_code: KeyCode) -> Result<()> {
+    fn refresh_screen(&mut self) {
+        let _ = Terminal::hide_caret();
+        let _ = Terminal::move_caret_to(terminal::Position::default());
+        self.view.render();
+        let _ = Terminal::move_caret_to(terminal::Position {
+            col: self.location.x,
+            row: self.location.y,
+        });
+
+        let _ = Terminal::show_caret();
+        let _ = Terminal::execute();
+    }
+
+    fn evaluate_event(&mut self, event: &Event) {
+        match *event {
+            Event::Resize(width, height) => {
+                let height = height as usize;
+                let width = width as usize;
+                self.view.resize(Size { width, height });
+            }
+            Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) => match code {
+                Char('q') if modifiers == KeyModifiers::CONTROL => self.should_quit = true,
+                Up | Down | Left | Right => self.move_to(code),
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+
+    fn move_to(&mut self, key_code: KeyCode) {
         let Location { mut x, mut y } = self.location;
-        let Size { height, width } = Terminal::size()?;
+        let Size { height, width } = Terminal::size().unwrap_or_default();
 
         match key_code {
             Up => y = y.saturating_sub(1),
@@ -91,7 +117,6 @@ impl Editor {
         }
 
         self.location = Location { x, y };
-        Ok(())
     }
 
     fn handle_args(&mut self) {

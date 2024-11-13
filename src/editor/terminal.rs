@@ -11,7 +11,7 @@ use crossterm::{
 
 pub struct Terminal {}
 
-#[derive(Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub struct Size {
     pub width: usize,
     pub height: usize,
@@ -26,6 +26,12 @@ pub struct Position {
 impl Position {
     pub fn default() -> Self {
         Position { col: 0, row: 0 }
+    }
+}
+
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        let _ = Self::terminate();
     }
 }
 
@@ -78,6 +84,16 @@ impl Terminal {
 
     pub fn print(string: &str) -> Result<()> {
         queue!(stdout(), Print(string))?;
+        Ok(())
+    }
+
+    pub fn print_line(cur_row: usize, string: &str) -> Result<()> {
+        Self::move_caret_to(Position {
+            col: 0,
+            row: cur_row,
+        });
+        Self::clear_line()?;
+        Self::print(string)?;
         Ok(())
     }
 
