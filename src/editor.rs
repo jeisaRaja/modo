@@ -1,5 +1,5 @@
 use core::panic;
-use crossterm::event::{self, read, Event, KeyCode::*, KeyEvent};
+use crossterm::event::{read, Event, KeyCode::*, KeyEvent};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::cmp::min;
 use std::panic::{set_hook, take_hook};
@@ -97,7 +97,9 @@ impl Editor {
                 code, modifiers, ..
             }) => match code {
                 Char('q') if modifiers == KeyModifiers::CONTROL => self.should_quit = true,
-                Up | Down | Left | Right => self.move_to(code),
+                Up | Down | Left | Right | Char('j') | Char('k') | Char('h') | Char('l') => {
+                    self.move_to(code)
+                }
                 _ => {}
             },
             _ => {}
@@ -109,10 +111,10 @@ impl Editor {
         let Size { height, width } = Terminal::size().unwrap_or_default();
 
         match key_code {
-            Up => y = y.saturating_sub(1),
-            Down => y = min(height.saturating_sub(1), y.saturating_add(1)),
-            Left => x = x.saturating_sub(1),
-            Right => x = min(width.saturating_sub(1), x.saturating_add(1)),
+            Up | Char('k') => y = y.saturating_sub(1),
+            Down | Char('j') => y = min(height.saturating_sub(1), y.saturating_add(1)),
+            Left | Char('h') => x = x.saturating_sub(1),
+            Right | Char('l') => x = min(width.saturating_sub(1), x.saturating_add(1)),
             _ => (),
         }
 
