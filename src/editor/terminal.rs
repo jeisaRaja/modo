@@ -41,8 +41,8 @@ impl Drop for Terminal {
 impl Terminal {
     pub fn terminate() -> Result<()> {
         Self::execute()?;
-        disable_raw_mode()?;
         Self::leave_alternate_screen()?;
+        disable_raw_mode()?;
         Ok(())
     }
 

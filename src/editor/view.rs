@@ -1,13 +1,20 @@
 use crate::editor::{APP_NAME, VERSION};
 use buffer::Buffer;
 pub mod buffer;
+pub mod location;
+use location::Location;
 
-use super::terminal::{Size, Terminal};
+use super::{
+    editor_command::{Direction, EditorCommand},
+    terminal::{Position, Size, Terminal},
+};
 
 pub struct View {
     pub buffer: Buffer,
     size: Size,
     need_redraw: bool,
+    location: Location,
+    scroll_offset: Location,
 }
 
 impl View {
@@ -67,6 +74,58 @@ impl View {
         let full_message = format!("~{}{}", " ".repeat(padding), welcome_message);
         full_message
     }
+    pub fn handle_command(&mut self, command: EditorCommand) {
+        match command {
+            EditorCommand::Move(dir) => self.move_text_location(&dir),
+            EditorCommand::Quit => {}
+            EditorCommand::Resize(size) => self.resize(size),
+        }
+    }
+
+    fn move_text_location(&mut self, dir: &Direction) {
+        let Location { mut x, mut y } = self.location;
+        let Size { width, height } = self.size;
+        match dir {
+            Direction::Up => y = y.saturating_sub(1),
+            Direction::Down => y = y.saturating_add(1),
+            Direction::PageUp => y = 0,
+            Direction::PageDown => y = height.saturating_sub(1),
+            Direction::Left => x = x.saturating_sub(1),
+            Direction::Right => x = x.saturating_add(1),
+            Direction::Home => x = 0,
+            Direction::End => x = width.saturating_sub(1),
+        }
+
+        self.location = Location { x, y };
+        self.scroll_location_into_view();
+    }
+
+    fn scroll_location_into_view(&mut self) {
+        let Location { x, y } = self.location;
+        let Size { width, height } = self.size;
+        let mut offset_changed = false;
+        if y < self.scroll_offset.y {
+            self.scroll_offset.y = y;
+            offset_changed = true;
+        } else if y >= self.scroll_offset.y.saturating_add(height) {
+            self.scroll_offset.y = y.saturating_sub(height).saturating_add(1);
+            offset_changed = true;
+        }
+
+        if x < self.scroll_offset.x {
+            self.scroll_offset.x = x;
+            offset_changed = true;
+        } else if x >= self.scroll_offset.x.saturating_add(width) {
+            self.scroll_offset.x = x.saturating_sub(width).saturating_add(1);
+            offset_changed = true;
+        }
+
+        self.need_redraw = offset_changed;
+    }
+
+    pub fn get_position(&self) -> Position {
+        Position::from(self.location)
+    }
 }
 
 impl Default for View {
@@ -75,6 +134,8 @@ impl Default for View {
             buffer: Buffer::default(),
             need_redraw: true,
             size: Terminal::size().unwrap_or_default(),
+            location: Location::default(),
+            scroll_offset: Location::default(),
         }
     }
 }
